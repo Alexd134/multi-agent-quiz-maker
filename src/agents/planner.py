@@ -2,7 +2,7 @@
 
 from typing import Any, Dict
 
-from langchain_anthropic import ChatAnthropic
+from langchain_aws import ChatBedrock
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from src.config.settings import get_settings
@@ -31,7 +31,7 @@ def create_quiz_plan(state: QuizState) -> Dict[str, Any]:
     settings = get_settings()
 
     # Initialize Claude with structured output
-    llm = ChatAnthropic(
+    llm = ChatBedrock(
         model=settings.model_name,
         temperature=settings.default_temperature,
     )
@@ -156,6 +156,9 @@ def validate_quiz_plan(plan: Dict[str, Any], user_input) -> Dict[str, Any]:
         for i, round_data in enumerate(plan["rounds"]):
             if "round_number" not in round_data:
                 round_data["round_number"] = i + 1
+            if "round_name" not in round_data:
+                topic = round_data.get("topic", f"Topic {i + 1}")
+                round_data["round_name"] = f"Round {i + 1}: {topic}"
             if "question_count" not in round_data:
                 round_data["question_count"] = user_input.questions_per_round
             if "difficulty" not in round_data:

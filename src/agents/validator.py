@@ -2,7 +2,7 @@
 
 from typing import Any, Dict, List
 
-from langchain_anthropic import ChatAnthropic
+from langchain_aws import ChatBedrock
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from src.config.settings import get_settings
@@ -36,7 +36,7 @@ def validate_answers(state: QuizState) -> Dict[str, Any]:
         }
 
     # Initialize Claude with structured output
-    llm = ChatAnthropic(
+    llm = ChatBedrock(
         model=settings.model_name,
         temperature=settings.validation_temperature,
     )

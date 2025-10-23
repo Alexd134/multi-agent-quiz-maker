@@ -2,7 +2,7 @@
 
 from typing import Any, Dict, List
 
-from langchain_anthropic import ChatAnthropic
+from langchain_aws import ChatBedrock
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from src.config.settings import get_settings
@@ -38,7 +38,7 @@ def review_questions(state: QuizState) -> Dict[str, Any]:
             "needs_regeneration": True,
         }
 
-    llm = ChatAnthropic(
+    llm = ChatBedrock(
         model=settings.model_name,
         temperature=settings.review_temperature,
     )

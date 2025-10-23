@@ -94,17 +94,6 @@ def generate(
     Example:
         quiz-agent generate -t "World History" -t "Science" -q 15 -d medium -o my_quiz
     """
-    # Check for API key
-    if not os.getenv("ANTHROPIC_API_KEY"):
-        console.print(
-            "[red]Error:[/red] ANTHROPIC_API_KEY environment variable not set.",
-            style="bold",
-        )
-        console.print(
-            "\nPlease set your API key:\n  export ANTHROPIC_API_KEY='your-key-here'"
-        )
-        raise typer.Exit(code=1)
-
     # Display configuration
     display_config(
         topics, questions_per_round, difficulty, title, description, output

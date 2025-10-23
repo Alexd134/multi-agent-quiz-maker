@@ -15,17 +15,27 @@ load_dotenv()
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
-    # API Keys
-    anthropic_api_key: str = Field(
+    # AWS CONFIG
+    aws_api_key_id: str = Field(
         ...,
-        description="Anthropic API key for Claude",
-        validation_alias="ANTHROPIC_API_KEY",
+        description="AWS API key ID",
+        validation_alias="AWS_ACCESS_KEY_ID",
+    )
+    aws_api_key_secret: str = Field(
+        ...,
+        description="AWS API key",
+        validation_alias="AWS_SECRET_ACCESS_KEY",
+    )
+    aws_default_region: str = Field(
+        ...,
+        description="AWS API region",
+        validation_alias="AWS_DEFAULT_REGION",
     )
 
     # Model Configuration
     model_name: str = Field(
-        default="claude-3-5-sonnet-20241022",
-        description="Claude model to use",
+        default="anthropic.claude-3-7-sonnet-20250219-v1:0",
+        description="Model to use (AWS Bedrock model ID)",
         validation_alias="MODEL_NAME",
     )
 
