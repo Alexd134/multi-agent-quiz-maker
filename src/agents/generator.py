@@ -102,20 +102,11 @@ Focus on:
                 all_questions.append(question)
 
         except Exception as e:
-            # Batch generation failed, try one question at a time
-            print(f"Batch generation failed for {topic}: {e}")
-            print(f"Attempting to generate questions individually...")
-
-            for i in range(question_count):
-                try:
-                    question = generate_single_question(topic, difficulty, llm)
-                    all_questions.append(question)
-                except Exception as single_error:
-                    # Skip this question and log the failure
-                    error_msg = f"Failed to generate question {i+1}/{question_count} for {topic}: {single_error}"
-                    state.get("errors", []).append(error_msg)
-                    print(f"Skipping question: {error_msg}")
-                    # Don't add a fallback - just continue with fewer questions
+            # Log error and skip this entire round
+            error_msg = f"Failed to generate questions for round {round_number} ({topic}): {str(e)}"
+            state.get("errors", []).append(error_msg)
+            print(f"Skipping round: {error_msg}")
+            continue
 
     # Increment feedback loop count if this is a regeneration
     new_feedback_count = feedback_loop_count
@@ -127,53 +118,6 @@ Focus on:
         "feedback_loop_count": new_feedback_count,
         "needs_regeneration": False,  # Reset the flag
     }
-
-
-def parse_questions_response(content: str) -> List[Dict[str, Any]]:
-    """
-    Parse the AI response to extract questions.
-
-    Handles various response formats including markdown code blocks.
-
-    Args:
-        content: Raw response from Claude
-
-    Returns:
-        List of question dictionaries
-    """
-    # Remove markdown code blocks if present
-    if "```json" in content:
-        content = content.split("```json")[1].split("```")[0].strip()
-    elif "```" in content:
-        content = content.split("```")[1].split("```")[0].strip()
-
-    # Remove any leading/trailing whitespace
-    content = content.strip()
-
-    try:
-        questions_data = json.loads(content)
-
-        # Ensure it's a list
-        if isinstance(questions_data, dict):
-            questions_data = [questions_data]
-
-        return questions_data
-    except json.JSONDecodeError as e:
-        # Try to extract JSON from the content
-        import re
-
-        json_pattern = r"\[[\s\S]*\]"
-        match = re.search(json_pattern, content)
-        if match:
-            try:
-                return json.loads(match.group())
-            except json.JSONDecodeError:
-                pass
-
-        # If all parsing fails, return empty list
-        print(f"Failed to parse questions: {e}")
-        print(f"Content: {content[:200]}...")
-        return []
 
 
 def format_feedback_for_round(
@@ -209,49 +153,3 @@ def format_feedback_for_round(
             feedback_text.append(f"  Suggestion: {item['suggestion']}")
 
     return "\n".join(feedback_text) if feedback_text else "Improve overall quality."
-
-
-def generate_single_question(
-    topic: str, difficulty: str, llm: ChatAnthropic
-) -> Question:
-    """
-    Generate a single question (useful for targeted regeneration).
-
-    Args:
-        topic: Question topic
-        difficulty: Difficulty level
-        llm: Language model instance
-
-    Returns:
-        Generated Question object
-
-    Raises:
-        Exception: If question generation fails
-    """
-    
-    llm_with_structure = llm.with_structured_output(Question)
-
-    system_prompt = """You are an expert quiz question writer. Create ONE high-quality multiple-choice question.
-
-Requirements:
-- Exactly 4 options (A, B, C, D)
-- Only ONE correct answer
-- Clear, unambiguous wording
-- Plausible but clearly incorrect distractors"""
-
-    user_prompt = f"""Generate ONE multiple-choice question on: {topic}
-Difficulty: {difficulty}
-
-Create a high-quality question."""
-
-    messages = [
-        SystemMessage(content=system_prompt),
-        HumanMessage(content=user_prompt),
-    ]
-
-    # Returns Question object directly
-    question = llm_with_structure.invoke(messages)
-    # Set topic and difficulty
-    question.topic = topic
-    question.difficulty = QuestionDifficulty(difficulty)
-    return question

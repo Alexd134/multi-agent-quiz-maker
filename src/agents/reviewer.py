@@ -1,7 +1,6 @@
 """Quality Reviewer Agent - Reviews question quality and provides feedback."""
 
 from typing import Any, Dict, List
-import json
 
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -28,9 +27,9 @@ def review_questions(state: QuizState) -> Dict[str, Any]:
     Returns:
         Dictionary with updated state containing reviewed_questions and feedback
     """
-    raw_questions = state["raw_questions"]
-    quality_threshold = state.get("quality_threshold", 0.7)
     settings = get_settings()
+    raw_questions = state["raw_questions"]
+    quality_threshold = state.get("quality_threshold", settings.default_quality_threshold)
 
     if not raw_questions:
         return {
@@ -39,13 +38,11 @@ def review_questions(state: QuizState) -> Dict[str, Any]:
             "needs_regeneration": True,
         }
 
-    # Initialize Claude with structured output
     llm = ChatAnthropic(
         model=settings.model_name,
         temperature=settings.review_temperature,
     )
 
-    # Use structured output
     llm_with_structure = llm.with_structured_output(ReviewList)
 
     reviewed_questions: List[Question] = []
@@ -57,7 +54,6 @@ def review_questions(state: QuizState) -> Dict[str, Any]:
     for i in range(0, len(raw_questions), batch_size):
         batch = raw_questions[i : i + batch_size]
 
-        # Create review prompt (simpler now - no JSON format needed)
         system_prompt = """You are an expert quiz quality reviewer. Evaluate quiz questions on multiple criteria.
 
 For each question, assess:
@@ -85,7 +81,6 @@ Evaluate each question with detailed scores and feedback."""
         ]
 
         try:
-            # Get review from Claude - returns ReviewList object directly
             review_list = llm_with_structure.invoke(messages)
 
             # Apply reviews to questions
@@ -177,76 +172,3 @@ Explanation: {q.explanation or 'Not provided'}
 ---""")
 
     return "\n".join(formatted)
-
-
-def parse_review_response(content: str) -> List[Dict[str, Any]]:
-    """
-    Parse the review response from Claude.
-
-    Args:
-        content: Raw response content
-
-    Returns:
-        List of review dictionaries
-    """
-    # Remove markdown code blocks if present
-    if "```json" in content:
-        content = content.split("```json")[1].split("```")[0].strip()
-    elif "```" in content:
-        content = content.split("```")[1].split("```")[0].strip()
-
-    content = content.strip()
-
-    try:
-        reviews = json.loads(content)
-
-        # Ensure it's a list
-        if isinstance(reviews, dict):
-            reviews = [reviews]
-
-        return reviews
-    except json.JSONDecodeError as e:
-        print(f"Failed to parse review response: {e}")
-        print(f"Content: {content[:200]}...")
-        return []
-
-
-def create_default_review(question_index: int) -> Dict[str, Any]:
-    """
-    Create a default review if parsing fails.
-
-    Args:
-        question_index: Index of the question
-
-    Returns:
-        Default review dictionary
-    """
-    return {
-        "question_index": question_index,
-        "clarity_score": 0.7,
-        "correctness_score": 0.7,
-        "distractor_score": 0.7,
-        "difficulty_score": 0.7,
-        "engagement_score": 0.7,
-        "overall_score": 0.7,
-        "feedback": "Review unavailable, assuming acceptable quality.",
-        "issues": [],
-        "passed": True,
-    }
-
-
-def calculate_batch_quality(reviews: List[Dict[str, Any]]) -> float:
-    """
-    Calculate average quality score for a batch of reviews.
-
-    Args:
-        reviews: List of review dictionaries
-
-    Returns:
-        Average quality score
-    """
-    if not reviews:
-        return 0.7
-
-    scores = [r.get("overall_score", 0.7) for r in reviews]
-    return sum(scores) / len(scores) if scores else 0.7
