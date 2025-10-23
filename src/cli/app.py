@@ -248,8 +248,15 @@ def display_quiz_summary(quiz, state) -> None:
             score_str = f"[red]{score_str}[/red]"
         table.add_row("Avg Quality Score", score_str)
 
-    if quiz.metadata.regeneration_count > 0:
-        table.add_row("Regenerations", str(quiz.metadata.regeneration_count))
+    # Show regeneration stats if any regenerations occurred
+    feedback_loop_count = state.get("feedback_loop_count", 0)
+    if feedback_loop_count > 0:
+        regen_str = f"{feedback_loop_count} cycle(s)"
+        table.add_row("Regeneration Cycles", f"[yellow]{regen_str}[/yellow]")
+
+        # Count how many questions were regenerated
+        if quiz.metadata.regeneration_count > 0:
+            table.add_row("Questions Regenerated", f"[yellow]{quiz.metadata.regeneration_count}[/yellow]")
 
     console.print()
     console.print(table)

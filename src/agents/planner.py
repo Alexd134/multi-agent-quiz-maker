@@ -39,30 +39,33 @@ def create_quiz_plan(state: QuizState) -> Dict[str, Any]:
     # Use structured output to automatically generate and validate the schema
     llm_with_structure = llm.with_structured_output(QuizPlan)
 
-    # Create the planning prompt (much simpler now!)
+    # Create the planning prompt
     system_prompt = """You are a quiz planning expert. Your job is to create a well-structured quiz plan.
 
 Given the user's requirements, create a detailed quiz plan with:
 1. An engaging quiz title (if not provided)
 2. A brief description
 3. Rounds organized by topics
-4. Balanced distribution of questions
 
-Guidelines:
-- Each round should focus on one topic
-- Round names should be engaging and descriptive
-- Ensure variety and good flow between rounds
-- Consider the difficulty level requested"""
+IMPORTANT RULES:
+- Create EXACTLY ONE round for EACH topic provided by the user
+- Do NOT break down topics into sub-topics
+- Do NOT create additional rounds beyond the topics specified
+- Each round should have exactly the number of questions requested
+- Round names should be engaging and descriptive"""
 
+    topic_count = len(user_input.topics)
     user_prompt = f"""Create a quiz plan with the following requirements:
 
 Topics: {', '.join(user_input.topics)}
+Number of topics: {topic_count}
 Questions per round: {user_input.questions_per_round}
 Difficulty: {user_input.difficulty.value}
 {f"Custom title: {user_input.quiz_title}" if user_input.quiz_title else ""}
 {f"Custom description: {user_input.quiz_description}" if user_input.quiz_description else ""}
 
-Create an engaging quiz plan."""
+IMPORTANT: Create EXACTLY {topic_count} round(s) - one for each topic listed above.
+Do NOT create additional rounds or break topics into sub-topics."""
 
     messages = [
         SystemMessage(content=system_prompt),
@@ -85,7 +88,6 @@ Create an engaging quiz plan."""
 
     except Exception as e:
         # Fallback: create a basic plan
-        print(f"Error generating quiz plan: {e}")
         quiz_plan = create_fallback_plan(user_input)
 
     return {"quiz_plan": quiz_plan}
@@ -152,19 +154,37 @@ def validate_quiz_plan(plan: Dict[str, Any], user_input) -> Dict[str, Any]:
             for i, topic in enumerate(user_input.topics)
         ]
     else:
-        # Validate each round
-        for i, round_data in enumerate(plan["rounds"]):
-            if "round_number" not in round_data:
-                round_data["round_number"] = i + 1
-            if "round_name" not in round_data:
-                topic = round_data.get("topic", f"Topic {i + 1}")
-                round_data["round_name"] = f"Round {i + 1}: {topic}"
-            if "question_count" not in round_data:
-                round_data["question_count"] = user_input.questions_per_round
-            if "difficulty" not in round_data:
-                round_data["difficulty"] = user_input.difficulty.value
-            # Ensure difficulty is valid
-            if round_data["difficulty"] not in [d.value for d in QuestionDifficulty]:
-                round_data["difficulty"] = user_input.difficulty.value
+        # CRITICAL: Ensure we have exactly one round per topic
+        expected_rounds = len(user_input.topics)
+        actual_rounds = len(plan["rounds"])
+
+        if actual_rounds != expected_rounds:
+            print(f"Warning: LLM created {actual_rounds} rounds but expected {expected_rounds}. Using fallback.")
+            # Use fallback plan to ensure correct number of rounds
+            plan["rounds"] = [
+                {
+                    "round_number": i + 1,
+                    "round_name": f"Round {i + 1}: {topic}",
+                    "topic": topic,
+                    "question_count": user_input.questions_per_round,
+                    "difficulty": user_input.difficulty.value,
+                }
+                for i, topic in enumerate(user_input.topics)
+            ]
+        else:
+            # Validate each round
+            for i, round_data in enumerate(plan["rounds"]):
+                if "round_number" not in round_data:
+                    round_data["round_number"] = i + 1
+                if "round_name" not in round_data:
+                    topic = round_data.get("topic", f"Topic {i + 1}")
+                    round_data["round_name"] = f"Round {i + 1}: {topic}"
+                if "question_count" not in round_data:
+                    round_data["question_count"] = user_input.questions_per_round
+                if "difficulty" not in round_data:
+                    round_data["difficulty"] = user_input.difficulty.value
+                # Ensure difficulty is valid
+                if round_data["difficulty"] not in [d.value for d in QuestionDifficulty]:
+                    round_data["difficulty"] = user_input.difficulty.value
 
     return plan
