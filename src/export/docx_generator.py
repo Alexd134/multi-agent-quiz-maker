@@ -1,5 +1,7 @@
 """DOCX document generator for quiz export."""
 
+import os
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -10,18 +12,66 @@ from docx.shared import Inches, Pt, RGBColor
 from src.models.quiz import Quiz, QuizRound
 
 
-def export_to_docx(quiz: Quiz, output_path: str, include_answers: bool = False) -> str:
+def ensure_output_directory(output_dir: str = "output") -> Path:
+    """
+    Ensure the output directory exists.
+
+    Args:
+        output_dir: Directory path to create
+
+    Returns:
+        Path object for the output directory
+    """
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+    return output_path
+
+
+def generate_timestamped_filename(base_name: str, extension: str = "docx") -> str:
+    """
+    Generate a filename with timestamp.
+
+    Args:
+        base_name: Base name for the file
+        extension: File extension (without dot)
+
+    Returns:
+        Filename with timestamp
+    """
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    # Clean the base name to remove any path components
+    base_name = Path(base_name).name
+    return f"{base_name}_{timestamp}.{extension}"
+
+
+def export_to_docx(
+    quiz: Quiz,
+    output_path: str,
+    include_answers: bool = False,
+    use_output_dir: bool = True,
+    output_dir: str = "output"
+) -> str:
     """
     Export quiz to a formatted DOCX file.
 
     Args:
         quiz: Quiz object to export
-        output_path: Path where the DOCX file should be saved
+        output_path: Path where the DOCX file should be saved (can be relative or absolute)
         include_answers: If True, includes correct answers and explanations
+        use_output_dir: If True, saves to output directory with timestamp (default: True)
+        output_dir: Directory to save files in (default: "output")
 
     Returns:
         Path to the created DOCX file
     """
+    # If use_output_dir is True, modify the output path
+    if use_output_dir:
+        output_dir_path = ensure_output_directory(output_dir)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        base_name = Path(output_path).stem  # Get name without extension
+        filename = f"{base_name}_{timestamp}.docx"
+        output_path = str(output_dir_path / filename)
+
     # Create document
     doc = Document()
 
@@ -252,7 +302,7 @@ def generate_answer_key(quiz: Quiz, output_path: str) -> str:
 
 
 def export_quiz_with_separate_answers(
-    quiz: Quiz, base_path: str
+    quiz: Quiz, base_path: str, output_dir: str = "output"
 ) -> tuple[str, str]:
     """
     Export quiz with questions and answers in separate files.
@@ -260,15 +310,26 @@ def export_quiz_with_separate_answers(
     Args:
         quiz: Quiz object
         base_path: Base path for output files (without extension)
+        output_dir: Directory to save files in (default: "output")
 
     Returns:
         Tuple of (questions_path, answers_path)
     """
-    questions_path = f"{base_path}_questions.docx"
-    answers_path = f"{base_path}_answers.docx"
+    # Ensure output directory exists
+    output_path = ensure_output_directory(output_dir)
 
-    # Export questions without answers
-    export_to_docx(quiz, questions_path, include_answers=False)
+    # Generate timestamped filenames
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    base_name = Path(base_path).name
+
+    questions_filename = f"{base_name}_questions_{timestamp}.docx"
+    answers_filename = f"{base_name}_answers_{timestamp}.docx"
+
+    questions_path = str(output_path / questions_filename)
+    answers_path = str(output_path / answers_filename)
+
+    # Export questions without answers (use_output_dir=False since we already handled paths)
+    export_to_docx(quiz, questions_path, include_answers=False, use_output_dir=False)
 
     # Export answer key
     generate_answer_key(quiz, answers_path)

@@ -15,6 +15,7 @@ env/
 .env
 
 # Generated quiz files
+output/
 *.docx
 quiz*.docx
 *_questions.docx
