@@ -98,12 +98,13 @@ Evaluate each question with detailed scores and feedback."""
 
                     reviewed_questions.append(question)
 
-                    # Track feedback
+                    # Track feedback with question ID for selective regeneration
                     if review.overall_score < quality_threshold:
                         low_quality_count += 1
                         all_feedback.append(
                             {
-                                "question_index": i + j,
+                                "question_id": question.id,  # Track by ID instead of index
+                                "question_index": i + j,  # Keep index for debugging
                                 "topic": question.topic,
                                 "issue": review.feedback,
                                 "issues": review.issues,

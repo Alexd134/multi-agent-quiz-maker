@@ -15,7 +15,7 @@ def generate_questions(state: QuizState) -> Dict[str, Any]:
     Question Generator Agent: Generate quiz questions based on the quiz plan.
 
     This agent generates questions for each round in the quiz plan.
-    It can regenerate questions if quality review fails.
+    On regeneration, it only regenerates questions that failed review.
 
     Args:
         state: Current quiz state containing quiz_plan
@@ -26,6 +26,7 @@ def generate_questions(state: QuizState) -> Dict[str, Any]:
     quiz_plan = state["quiz_plan"]
     feedback_loop_count = state.get("feedback_loop_count", 0)
     review_feedback = state.get("review_feedback", None)
+    raw_questions = state.get("raw_questions", [])
     settings = get_settings()
 
     # Initialize Claude with structured output
@@ -37,7 +38,24 @@ def generate_questions(state: QuizState) -> Dict[str, Any]:
     # Use structured output to automatically generate and validate the schema
     llm_with_structure = llm.with_structured_output(QuestionList)
 
-    all_questions: List[Question] = []
+    # Check if this is a regeneration
+    is_regeneration = feedback_loop_count > 0 and review_feedback is not None
+
+    if is_regeneration:
+        # Extract IDs of questions that need regeneration
+        failed_question_ids = {fb["question_id"] for fb in review_feedback}
+        # Keep questions that passed review
+        all_questions = [q for q in raw_questions if q.id not in failed_question_ids]
+
+        # Group failed questions by topic to know how many to regenerate per round
+        failed_by_topic: Dict[str, int] = {}
+        for fb in review_feedback:
+            topic = fb["topic"]
+            failed_by_topic[topic] = failed_by_topic.get(topic, 0) + 1
+    else:
+        # First generation - start fresh
+        all_questions: List[Question] = []
+        failed_by_topic = {}
 
     # Generate questions for each round
     for round_data in quiz_plan["rounds"]:
@@ -46,13 +64,23 @@ def generate_questions(state: QuizState) -> Dict[str, Any]:
         difficulty = round_data["difficulty"]
         round_number = round_data["round_number"]
 
+        # On regeneration, only generate the number of failed questions for this topic
+        if is_regeneration:
+            questions_to_generate = failed_by_topic.get(topic, 0)
+            if questions_to_generate == 0:
+                # No failed questions for this topic, skip
+                continue
+        else:
+            # First generation, generate all questions
+            questions_to_generate = question_count
+
         # If we're regenerating, include feedback
         regeneration_context = ""
-        if feedback_loop_count > 0 and review_feedback:
+        if is_regeneration:
             regeneration_context = f"""
 IMPORTANT: This is regeneration attempt {feedback_loop_count}.
-Previous questions had quality issues. Please improve based on this feedback:
-{format_feedback_for_round(review_feedback, round_number)}
+Previous questions on this topic had quality issues. Please improve based on this feedback:
+{format_feedback_for_topic(review_feedback, topic)}
 
 Focus on:
 - More interesting and engaging questions
@@ -61,7 +89,7 @@ Focus on:
 - Proper difficulty level
 """
 
-        # Create the generation prompt (simpler now - no JSON format specification needed)
+        # Create the generation prompt
         system_prompt = f"""You are an expert quiz question writer. Create high-quality, engaging multiple-choice questions.
 
                 Requirements:
@@ -77,14 +105,14 @@ Focus on:
                 - medium: Requires general knowledge or logical thinking
                 - hard: Challenging, requires specific knowledge or deep thinking"""
 
-        user_prompt = f"""Generate {question_count} multiple-choice questions on the topic: {topic}
+        user_prompt = f"""Generate {questions_to_generate} multiple-choice questions on the topic: {topic}
 
                 Difficulty level: {difficulty}
                 Round: {round_number}
 
                 {regeneration_context}
 
-                Generate exactly {question_count} high-quality questions."""
+                Generate exactly {questions_to_generate} high-quality questions."""
 
         messages = [
             SystemMessage(content=system_prompt),
@@ -120,15 +148,15 @@ Focus on:
     }
 
 
-def format_feedback_for_round(
-    feedback: List[Dict[str, Any]], round_number: int
+def format_feedback_for_topic(
+    feedback: List[Dict[str, Any]], topic: str
 ) -> str:
     """
-    Format quality feedback for a specific round.
+    Format quality feedback for a specific topic.
 
     Args:
         feedback: List of feedback items
-        round_number: Round number to filter feedback for
+        topic: Topic to filter feedback for
 
     Returns:
         Formatted feedback string
@@ -136,11 +164,8 @@ def format_feedback_for_round(
     if not feedback:
         return "No specific feedback available."
 
-    relevant_feedback = [
-        f
-        for f in feedback
-        if f.get("round_number") == round_number or "round_number" not in f
-    ]
+    # Filter feedback for this topic
+    relevant_feedback = [f for f in feedback if f.get("topic") == topic]
 
     if not relevant_feedback:
         return "General: Improve question quality, clarity, and difficulty appropriateness."
@@ -149,7 +174,8 @@ def format_feedback_for_round(
     for item in relevant_feedback:
         if "issue" in item:
             feedback_text.append(f"- {item['issue']}")
-        if "suggestion" in item:
-            feedback_text.append(f"  Suggestion: {item['suggestion']}")
+        if "issues" in item and item["issues"]:
+            for issue in item["issues"]:
+                feedback_text.append(f"  • {issue}")
 
     return "\n".join(feedback_text) if feedback_text else "Improve overall quality."

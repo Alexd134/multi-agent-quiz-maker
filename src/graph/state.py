@@ -6,14 +6,28 @@ from typing_extensions import TypedDict
 
 from src.models.quiz import Question, Quiz, QuizRound, UserInput
 
-#Merge functions ensure that the agents don't overwrite each others work or it's own previous work
+# Merge functions ensure that the agents don't overwrite each others work or it's own previous work
 def merge_questions(existing: List[Question], new: List[Question]) -> List[Question]:
-    """Merge question lists, replacing by index or appending."""
+    """
+    Merge question lists by replacing questions with matching IDs.
+
+    On regeneration, new questions replace old ones with the same ID.
+    Questions without matches are added to the list.
+    """
     if not existing:
         return new
     if not new:
         return existing
-    return existing + new
+
+    # Create a dictionary of existing questions by ID for fast lookup
+    existing_dict = {q.id: q for q in existing}
+
+    # Replace or add questions from new list
+    for question in new:
+        existing_dict[question.id] = question
+
+    # Return as list, preserving order as much as possible
+    return list(existing_dict.values())
 
 
 def merge_rounds(existing: List[QuizRound], new: List[QuizRound]) -> List[QuizRound]:

@@ -1,5 +1,6 @@
 """Pydantic models for quiz data structures."""
 
+import uuid
 from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
@@ -18,6 +19,10 @@ class QuestionDifficulty(str, Enum):
 class Question(BaseModel):
     """A single quiz question with multiple choice answers."""
 
+    id: str = Field(
+        default_factory=lambda: str(uuid.uuid4()),
+        description="Unique identifier for the question",
+    )
     question_text: str = Field(..., min_length=10, description="The question text")
     options: Dict[str, str] = Field(
         ...,
