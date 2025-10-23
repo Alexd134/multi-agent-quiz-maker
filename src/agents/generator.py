@@ -1,13 +1,13 @@
 """Question Generator Agent - Generates quiz questions using AI."""
 
-import json
 from typing import Any, Dict, List
 
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 
+from src.config.settings import get_settings
 from src.graph.state import QuizState
-from src.models.quiz import Question, QuestionDifficulty
+from src.models.quiz import Question, QuestionDifficulty, QuestionList
 
 
 def generate_questions(state: QuizState) -> Dict[str, Any]:
@@ -26,12 +26,16 @@ def generate_questions(state: QuizState) -> Dict[str, Any]:
     quiz_plan = state["quiz_plan"]
     feedback_loop_count = state.get("feedback_loop_count", 0)
     review_feedback = state.get("review_feedback", None)
+    settings = get_settings()
 
-    # Initialize Claude
+    # Initialize Claude with structured output
     llm = ChatAnthropic(
-        model="claude-3-5-sonnet-20241022",
-        temperature=0.8,  # Higher temperature for more creative questions
+        model=settings.model_name,
+        temperature=settings.default_temperature,
     )
+
+    # Use structured output to automatically generate and validate the schema
+    llm_with_structure = llm.with_structured_output(QuestionList)
 
     all_questions: List[Question] = []
 
@@ -57,79 +61,61 @@ Focus on:
 - Proper difficulty level
 """
 
-        # Create the generation prompt
+        # Create the generation prompt (simpler now - no JSON format specification needed)
         system_prompt = f"""You are an expert quiz question writer. Create high-quality, engaging multiple-choice questions.
 
-Requirements:
-- Each question must have exactly 4 options (A, B, C, D)
-- Only ONE option should be correct
-- Incorrect options (distractors) should be plausible but clearly wrong
-- Questions should be clear and unambiguous
-- Avoid trivial or overly obscure questions
-- Match the requested difficulty level
+                Requirements:
+                - Each question must have exactly 4 options (A, B, C, D)
+                - Only ONE option should be correct
+                - Incorrect options (distractors) should be plausible but clearly wrong
+                - Questions should be clear and unambiguous
+                - Avoid trivial or overly obscure questions
+                - Match the requested difficulty level
 
-Difficulty levels:
-- easy: Common knowledge, straightforward questions
-- medium: Requires general knowledge or logical thinking
-- hard: Challenging, requires specific knowledge or deep thinking
-
-Return ONLY a JSON array of questions in this exact format:
-[
-    {{
-        "question_text": "What is the capital of France?",
-        "options": {{
-            "A": "London",
-            "B": "Paris",
-            "C": "Berlin",
-            "D": "Madrid"
-        }},
-        "correct_answer": "B",
-        "explanation": "Paris has been the capital of France since 987 AD."
-    }}
-]
-
-IMPORTANT: Return ONLY the JSON array, no additional text or markdown.
-"""
+                Difficulty levels:
+                - easy: Common knowledge, straightforward questions
+                - medium: Requires general knowledge or logical thinking
+                - hard: Challenging, requires specific knowledge or deep thinking"""
 
         user_prompt = f"""Generate {question_count} multiple-choice questions on the topic: {topic}
 
-Difficulty level: {difficulty}
-Round: {round_number}
+                Difficulty level: {difficulty}
+                Round: {round_number}
 
-{regeneration_context}
+                {regeneration_context}
 
-Generate exactly {question_count} high-quality questions following the JSON format specified.
-Remember: Return ONLY the JSON array, no markdown code blocks or additional text."""
+                Generate exactly {question_count} high-quality questions."""
 
         messages = [
             SystemMessage(content=system_prompt),
             HumanMessage(content=user_prompt),
         ]
 
-        # Get questions from Claude
-        response = llm.invoke(messages)
-        content = response.content
+        try:
+            # Get questions from LLM - returns QuestionList object directly
+            question_list = llm_with_structure.invoke(messages)
 
-        # Parse the response
-        questions_data = parse_questions_response(content)
-
-        # Convert to Question objects
-        for q_data in questions_data:
-            try:
-                question = Question(
-                    question_text=q_data["question_text"],
-                    options=q_data["options"],
-                    correct_answer=q_data["correct_answer"],
-                    topic=topic,
-                    difficulty=QuestionDifficulty(difficulty),
-                    explanation=q_data.get("explanation"),
-                )
+            # Add topic and difficulty to each question
+            for question in question_list.questions:
+                question.topic = topic
+                question.difficulty = QuestionDifficulty(difficulty)
                 all_questions.append(question)
-            except Exception as e:
-                # Log error but continue with other questions
-                error_msg = f"Failed to create question from data: {e}"
-                state.get("errors", []).append(error_msg)
-                continue
+
+        except Exception as e:
+            # Batch generation failed, try one question at a time
+            print(f"Batch generation failed for {topic}: {e}")
+            print(f"Attempting to generate questions individually...")
+
+            for i in range(question_count):
+                try:
+                    question = generate_single_question(topic, difficulty, llm)
+                    all_questions.append(question)
+                except Exception as single_error:
+                    # Skip this question and log the failure
+                    error_msg = f"Failed to generate question {i+1}/{question_count} for {topic}: {single_error}"
+                    state.get("errors", []).append(error_msg)
+                    print(f"Skipping question: {error_msg}")
+                    # Don't add a fallback - just continue with fewer questions
 
     # Increment feedback loop count if this is a regeneration
     new_feedback_count = feedback_loop_count
@@ -238,74 +224,34 @@ def generate_single_question(
 
     Returns:
         Generated Question object
+
+    Raises:
+        Exception: If question generation fails
     """
+    
+    llm_with_structure = llm.with_structured_output(Question)
+
     system_prompt = """You are an expert quiz question writer. Create ONE high-quality multiple-choice question.
 
-Return ONLY a JSON object in this format:
-{
-    "question_text": "What is the capital of France?",
-    "options": {
-        "A": "London",
-        "B": "Paris",
-        "C": "Berlin",
-        "D": "Madrid"
-    },
-    "correct_answer": "B",
-    "explanation": "Paris has been the capital of France since 987 AD."
-}"""
+Requirements:
+- Exactly 4 options (A, B, C, D)
+- Only ONE correct answer
+- Clear, unambiguous wording
+- Plausible but clearly incorrect distractors"""
 
     user_prompt = f"""Generate ONE multiple-choice question on: {topic}
 Difficulty: {difficulty}
 
-Return ONLY the JSON object, no markdown or additional text."""
+Create a high-quality question."""
 
     messages = [
         SystemMessage(content=system_prompt),
         HumanMessage(content=user_prompt),
     ]
 
-    response = llm.invoke(messages)
-    content = response.content
-
-    # Parse response
-    questions_data = parse_questions_response(content)
-
-    if questions_data and len(questions_data) > 0:
-        q_data = questions_data[0]
-        return Question(
-            question_text=q_data["question_text"],
-            options=q_data["options"],
-            correct_answer=q_data["correct_answer"],
-            topic=topic,
-            difficulty=QuestionDifficulty(difficulty),
-            explanation=q_data.get("explanation"),
-        )
-
-    # Fallback question if generation fails
-    return create_fallback_question(topic, difficulty)
-
-
-def create_fallback_question(topic: str, difficulty: str) -> Question:
-    """
-    Create a fallback question if generation fails.
-
-    Args:
-        topic: Question topic
-        difficulty: Difficulty level
-
-    Returns:
-        Basic Question object
-    """
-    return Question(
-        question_text=f"Sample question about {topic}?",
-        options={
-            "A": "Option A",
-            "B": "Option B",
-            "C": "Option C",
-            "D": "Option D",
-        },
-        correct_answer="A",
-        topic=topic,
-        difficulty=QuestionDifficulty(difficulty),
-        explanation="This is a fallback question.",
-    )
+    # Returns Question object directly
+    question = llm_with_structure.invoke(messages)
+    # Set topic and difficulty
+    question.topic = topic
+    question.difficulty = QuestionDifficulty(difficulty)
+    return question

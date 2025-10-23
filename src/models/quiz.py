@@ -226,3 +226,73 @@ class UserInput(BaseModel):
             }
         }
     }
+
+
+# Structured output models for LLM responses
+
+
+class QuizPlan(BaseModel):
+    """Quiz plan structure from Planner Agent."""
+
+    title: str = Field(..., description="Quiz title")
+    description: str = Field(..., description="Quiz description")
+    rounds: List[Dict[str, Any]] = Field(
+        ...,
+        description="List of rounds with topic, question_count, etc.",
+    )
+
+
+class QuestionList(BaseModel):
+    """List of questions from Generator Agent."""
+
+    questions: List[Question] = Field(
+        ...,
+        description="List of generated questions",
+    )
+
+
+class QuestionReview(BaseModel):
+    """Review result for a single question."""
+
+    question_index: int
+    clarity_score: float = Field(..., ge=0.0, le=1.0)
+    correctness_score: float = Field(..., ge=0.0, le=1.0)
+    distractor_score: float = Field(..., ge=0.0, le=1.0)
+    difficulty_score: float = Field(..., ge=0.0, le=1.0)
+    engagement_score: float = Field(..., ge=0.0, le=1.0)
+    overall_score: float = Field(..., ge=0.0, le=1.0)
+    feedback: str
+    issues: List[str] = Field(default_factory=list)
+    passed: bool
+
+
+class ReviewList(BaseModel):
+    """List of reviews from Reviewer Agent."""
+
+    reviews: List[QuestionReview] = Field(
+        ...,
+        description="List of question reviews",
+    )
+
+
+class QuestionValidation(BaseModel):
+    """Validation result for a single question."""
+
+    question_index: int
+    is_correct: bool
+    correct_answer_valid: bool
+    incorrect_options_valid: bool
+    is_ambiguous: bool
+    explanation_matches: bool
+    issues: List[str] = Field(default_factory=list)
+    suggested_fix: Optional[str] = None
+    confidence: float = Field(..., ge=0.0, le=1.0)
+
+
+class ValidationList(BaseModel):
+    """List of validations from Validator Agent."""
+
+    validations: List[QuestionValidation] = Field(
+        ...,
+        description="List of question validations",
+    )

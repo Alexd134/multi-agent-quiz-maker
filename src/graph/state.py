@@ -6,14 +6,13 @@ from typing_extensions import TypedDict
 
 from src.models.quiz import Question, Quiz, QuizRound, UserInput
 
-
+#Merge functions ensure that the agents don't overwrite each others work or it's own previous work
 def merge_questions(existing: List[Question], new: List[Question]) -> List[Question]:
     """Merge question lists, replacing by index or appending."""
     if not existing:
         return new
     if not new:
         return existing
-    # For now, append new questions. Could add more sophisticated merging logic.
     return existing + new
 
 
@@ -23,7 +22,7 @@ def merge_rounds(existing: List[QuizRound], new: List[QuizRound]) -> List[QuizRo
         return new
     if not new:
         return existing
-    # Replace rounds with matching round_number, append new ones
+
     result = existing.copy()
     for new_round in new:
         for i, existing_round in enumerate(result):
@@ -33,7 +32,6 @@ def merge_rounds(existing: List[QuizRound], new: List[QuizRound]) -> List[QuizRo
         else:
             result.append(new_round)
     return result
-
 
 class QuizState(TypedDict, total=False):
     """

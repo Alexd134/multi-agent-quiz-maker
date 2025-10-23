@@ -1,13 +1,13 @@
 """Answer Validator Agent - Validates answer correctness and option quality."""
 
-import json
 from typing import Any, Dict, List
 
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 
+from src.config.settings import get_settings
 from src.graph.state import QuizState
-from src.models.quiz import Question
+from src.models.quiz import Question, ValidationList
 
 
 def validate_answers(state: QuizState) -> Dict[str, Any]:
@@ -27,6 +27,7 @@ def validate_answers(state: QuizState) -> Dict[str, Any]:
         Dictionary with updated state containing validated_questions and validation_issues
     """
     reviewed_questions = state["reviewed_questions"]
+    settings = get_settings()
 
     if not reviewed_questions:
         return {
@@ -34,11 +35,14 @@ def validate_answers(state: QuizState) -> Dict[str, Any]:
             "validation_issues": [{"error": "No questions to validate"}],
         }
 
-    # Initialize Claude
+    # Initialize Claude with structured output
     llm = ChatAnthropic(
-        model="claude-3-5-sonnet-20241022",
-        temperature=0.1,  # Very low temperature for objective validation
+        model=settings.model_name,
+        temperature=settings.validation_temperature,
     )
+
+    # Use structured output
+    llm_with_structure = llm.with_structured_output(ValidationList)
 
     validated_questions: List[Question] = []
     validation_issues: List[Dict[str, Any]] = []
@@ -48,7 +52,7 @@ def validate_answers(state: QuizState) -> Dict[str, Any]:
     for i in range(0, len(reviewed_questions), batch_size):
         batch = reviewed_questions[i : i + batch_size]
 
-        # Create validation prompt
+        # Create validation prompt (simpler now - no JSON format needed)
         system_prompt = """You are an expert fact-checker and quiz validator. Your job is to verify answers are correct.
 
 For each question, validate:
@@ -58,22 +62,7 @@ For each question, validate:
 4. Does the explanation support the correct answer?
 5. Are there any factual errors?
 
-Return a JSON array with one validation per question:
-[
-    {
-        "question_index": 0,
-        "is_correct": true,
-        "correct_answer_valid": true,
-        "incorrect_options_valid": true,
-        "is_ambiguous": false,
-        "explanation_matches": true,
-        "issues": [],
-        "suggested_fix": null,
-        "confidence": 0.95
-    }
-]
-
-If issues are found, provide specific details in the "issues" array and suggest fixes."""
+If issues are found, provide specific details and suggest fixes."""
 
         # Format questions for validation
         questions_text = format_questions_for_validation(batch, i)
@@ -82,52 +71,59 @@ If issues are found, provide specific details in the "issues" array and suggest 
 
 {questions_text}
 
-Check each answer carefully and return the JSON array with validation results."""
+Check each answer carefully and provide validation results."""
 
         messages = [
             SystemMessage(content=system_prompt),
             HumanMessage(content=user_prompt),
         ]
 
-        # Get validation from Claude
-        response = llm.invoke(messages)
-        content = response.content
+        try:
+            # Get validation from Claude - returns ValidationList object directly
+            validation_list = llm_with_structure.invoke(messages)
 
-        # Parse the validation
-        validations = parse_validation_response(content)
-
-        # Apply validations to questions
-        for j, question in enumerate(batch):
-            # Find matching validation
-            validation = next(
-                (v for v in validations if v.get("question_index") == j),
-                create_default_validation(j),
-            )
-
-            # Check if validation passed
-            is_valid = (
-                validation.get("is_correct", True)
-                and validation.get("correct_answer_valid", True)
-                and validation.get("incorrect_options_valid", True)
-                and not validation.get("is_ambiguous", False)
-            )
-
-            if is_valid:
-                validated_questions.append(question)
-            else:
-                # Track validation issues
-                validation_issues.append(
-                    {
-                        "question_index": i + j,
-                        "topic": question.topic,
-                        "question_text": question.question_text,
-                        "issues": validation.get("issues", ["Validation failed"]),
-                        "suggested_fix": validation.get("suggested_fix"),
-                        "confidence": validation.get("confidence", 0.0),
-                    }
+            # Apply validations to questions
+            for j, question in enumerate(batch):
+                # Find matching validation
+                validation = next(
+                    (v for v in validation_list.validations if v.question_index == j),
+                    None,
                 )
-                # Still add to validated list but with lower quality score
-                question.quality_score = 0.5  # Mark as questionable
+
+                if validation:
+                    # Check if validation passed
+                    is_valid = (
+                        validation.is_correct
+                        and validation.correct_answer_valid
+                        and validation.incorrect_options_valid
+                        and not validation.is_ambiguous
+                    )
+
+                    if is_valid:
+                        validated_questions.append(question)
+                    else:
+                        # Track validation issues
+                        validation_issues.append(
+                            {
+                                "question_index": i + j,
+                                "topic": question.topic,
+                                "question_text": question.question_text,
+                                "issues": validation.issues,
+                                "suggested_fix": validation.suggested_fix,
+                                "confidence": validation.confidence,
+                            }
+                        )
+                        # Still add to validated list but with lower quality score
+                        question.quality_score = 0.5  # Mark as questionable
+                        validated_questions.append(question)
+                else:
+                    # No validation found, assume valid
+                    validated_questions.append(question)
+
+        except Exception as e:
+            # If validation fails, accept questions anyway
+            print(f"Error validating batch: {e}")
+            for question in batch:
                 validated_questions.append(question)
 
     return {

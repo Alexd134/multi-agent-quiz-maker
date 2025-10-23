@@ -31,8 +31,8 @@ class Settings(BaseSettings):
 
     # Generation Settings
     default_temperature: float = Field(
-        default=0.8,
-        ge=0.0,
+        default=0.8, #higher temp than usual to try and generate more interesting questions
+        ge=0.0, #create max and min values for temp
         le=1.0,
         description="Default temperature for question generation",
         validation_alias="DEFAULT_TEMPERATURE",
@@ -98,6 +98,7 @@ class Settings(BaseSettings):
     }
 
 
+# This is loaded the first time and then cached for further ues by other agents
 @lru_cache()
 def get_settings() -> Settings:
     """
@@ -107,22 +108,3 @@ def get_settings() -> Settings:
         Settings object with loaded configuration
     """
     return Settings()
-
-
-def get_anthropic_api_key() -> str:
-    """
-    Get Anthropic API key from environment.
-
-    Returns:
-        API key string
-
-    Raises:
-        ValueError: If API key is not set
-    """
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not api_key:
-        raise ValueError(
-            "ANTHROPIC_API_KEY environment variable not set. "
-            "Please set it before running the quiz generator."
-        )
-    return api_key

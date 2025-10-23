@@ -1,13 +1,14 @@
 """Quality Reviewer Agent - Reviews question quality and provides feedback."""
 
-import json
 from typing import Any, Dict, List
+import json
 
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 
+from src.config.settings import get_settings
 from src.graph.state import QuizState
-from src.models.quiz import Question
+from src.models.quiz import Question, ReviewList
 
 
 def review_questions(state: QuizState) -> Dict[str, Any]:
@@ -29,6 +30,7 @@ def review_questions(state: QuizState) -> Dict[str, Any]:
     """
     raw_questions = state["raw_questions"]
     quality_threshold = state.get("quality_threshold", 0.7)
+    settings = get_settings()
 
     if not raw_questions:
         return {
@@ -37,11 +39,14 @@ def review_questions(state: QuizState) -> Dict[str, Any]:
             "needs_regeneration": True,
         }
 
-    # Initialize Claude
+    # Initialize Claude with structured output
     llm = ChatAnthropic(
-        model="claude-3-5-sonnet-20241022",
-        temperature=0.3,  # Lower temperature for consistent evaluation
+        model=settings.model_name,
+        temperature=settings.review_temperature,
     )
+
+    # Use structured output
+    llm_with_structure = llm.with_structured_output(ReviewList)
 
     reviewed_questions: List[Question] = []
     all_feedback: List[Dict[str, Any]] = []
@@ -52,7 +57,7 @@ def review_questions(state: QuizState) -> Dict[str, Any]:
     for i in range(0, len(raw_questions), batch_size):
         batch = raw_questions[i : i + batch_size]
 
-        # Create review prompt
+        # Create review prompt (simpler now - no JSON format needed)
         system_prompt = """You are an expert quiz quality reviewer. Evaluate quiz questions on multiple criteria.
 
 For each question, assess:
@@ -61,22 +66,6 @@ For each question, assess:
 3. Distractor Quality: Are incorrect options plausible but clearly wrong? (0-1)
 4. Difficulty Match: Does it match the intended difficulty? (0-1)
 5. Engagement: Is it interesting and well-written? (0-1)
-
-Return a JSON array with one review per question:
-[
-    {
-        "question_index": 0,
-        "clarity_score": 0.9,
-        "correctness_score": 1.0,
-        "distractor_score": 0.8,
-        "difficulty_score": 0.9,
-        "engagement_score": 0.7,
-        "overall_score": 0.86,
-        "feedback": "Good question, but distractors could be more challenging.",
-        "issues": ["Distractor A is too obviously wrong"],
-        "passed": true
-    }
-]
 
 Overall score should be the average of the 5 criteria.
 Consider a question "passed" if overall_score >= 0.7"""
@@ -88,46 +77,57 @@ Consider a question "passed" if overall_score >= 0.7"""
 
 {questions_text}
 
-Evaluate each question and return the JSON array with detailed scores and feedback."""
+Evaluate each question with detailed scores and feedback."""
 
         messages = [
             SystemMessage(content=system_prompt),
             HumanMessage(content=user_prompt),
         ]
 
-        # Get review from Claude
-        response = llm.invoke(messages)
-        content = response.content
+        try:
+            # Get review from Claude - returns ReviewList object directly
+            review_list = llm_with_structure.invoke(messages)
 
-        # Parse the review
-        reviews = parse_review_response(content)
-
-        # Apply reviews to questions
-        for j, question in enumerate(batch):
-            # Find matching review
-            review = next(
-                (r for r in reviews if r.get("question_index") == j),
-                create_default_review(j),
-            )
-
-            # Update question with quality score and feedback
-            question.quality_score = review.get("overall_score", 0.7)
-            question.feedback = review.get("feedback", "")
-
-            reviewed_questions.append(question)
-
-            # Track feedback
-            if review.get("overall_score", 0.7) < quality_threshold:
-                low_quality_count += 1
-                all_feedback.append(
-                    {
-                        "question_index": i + j,
-                        "topic": question.topic,
-                        "issue": review.get("feedback", "Quality below threshold"),
-                        "issues": review.get("issues", []),
-                        "score": review.get("overall_score", 0.0),
-                    }
+            # Apply reviews to questions
+            for j, question in enumerate(batch):
+                # Find matching review
+                review = next(
+                    (r for r in review_list.reviews if r.question_index == j),
+                    None,
                 )
+
+                if review:
+                    # Update question with quality score and feedback
+                    question.quality_score = review.overall_score
+                    question.feedback = review.feedback
+
+                    reviewed_questions.append(question)
+
+                    # Track feedback
+                    if review.overall_score < quality_threshold:
+                        low_quality_count += 1
+                        all_feedback.append(
+                            {
+                                "question_index": i + j,
+                                "topic": question.topic,
+                                "issue": review.feedback,
+                                "issues": review.issues,
+                                "score": review.overall_score,
+                            }
+                        )
+                else:
+                    # No review found, use defaults
+                    question.quality_score = 0.7
+                    question.feedback = "Review not available"
+                    reviewed_questions.append(question)
+
+        except Exception as e:
+            # If review fails, accept questions with default scores
+            print(f"Error reviewing batch: {e}")
+            for question in batch:
+                question.quality_score = 0.7
+                question.feedback = "Review failed, assuming acceptable quality"
+                reviewed_questions.append(question)
 
     # Calculate average quality score
     avg_quality = (
