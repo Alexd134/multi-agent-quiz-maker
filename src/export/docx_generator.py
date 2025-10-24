@@ -1,9 +1,7 @@
 """DOCX document generator for quiz export."""
 
-import os
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -13,15 +11,6 @@ from src.models.quiz import Quiz, QuizRound
 
 
 def ensure_output_directory(output_dir: str = "output") -> Path:
-    """
-    Ensure the output directory exists.
-
-    Args:
-        output_dir: Directory path to create
-
-    Returns:
-        Path object for the output directory
-    """
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     return output_path
@@ -49,7 +38,7 @@ def export_to_docx(
     output_path: str,
     include_answers: bool = False,
     use_output_dir: bool = True,
-    output_dir: str = "output"
+    output_dir: str = "output",
 ) -> str:
     """
     Export quiz to a formatted DOCX file.
@@ -92,7 +81,7 @@ def export_to_docx(
     doc.add_paragraph()
     info_para = doc.add_paragraph()
     info_para.add_run(f"Total Rounds: {quiz.total_rounds}").bold = True
-    info_para.add_run(f"  |  ")
+    info_para.add_run("  |  ")
     info_para.add_run(f"Total Questions: {quiz.total_questions}").bold = True
     info_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
@@ -156,15 +145,13 @@ def add_round_to_document(
         include_answers: If True, includes answers and explanations
     """
     # Round header
-    round_heading = doc.add_heading(
-        f"Round {round_data.round_number}: {round_data.round_name}", level=1
-    )
+    round_heading = doc.add_heading(round_data.round_name, level=1)
     round_heading.runs[0].font.color.rgb = RGBColor(0, 51, 102)
 
     # Round info
     info_para = doc.add_paragraph()
     info_para.add_run(f"Topic: {round_data.topic}").italic = True
-    info_para.add_run(f"  |  ")
+    info_para.add_run("  |  ")
     info_para.add_run(f"Questions: {round_data.question_count}").italic = True
 
     doc.add_paragraph()
@@ -240,9 +227,7 @@ def add_answer_key(doc: Document, quiz: Quiz) -> None:
     # Add answers by round
     for round_data in quiz.rounds:
         # Round header
-        round_heading = doc.add_heading(
-            f"Round {round_data.round_number}: {round_data.round_name}", level=2
-        )
+        round_heading = doc.add_heading(round_data.round_name, level=2)
         round_heading.runs[0].font.color.rgb = RGBColor(0, 102, 204)
 
         # Create table for answers
@@ -265,7 +250,9 @@ def add_answer_key(doc: Document, quiz: Quiz) -> None:
         for i, question in enumerate(round_data.questions, 1):
             row_cells = table.add_row().cells
             row_cells[0].text = str(i)
-            row_cells[1].text = f"{question.correct_answer} - {question.options[question.correct_answer]}"
+            row_cells[1].text = (
+                f"{question.correct_answer} - {question.options[question.correct_answer]}"
+            )
             row_cells[2].text = question.explanation or "N/A"
 
         doc.add_paragraph()

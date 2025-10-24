@@ -1,6 +1,6 @@
 """Answer Validator Agent - Validates answer correctness and option quality."""
 
-from typing import Any, Dict, List
+from typing import Any
 
 from langchain_aws import ChatBedrock
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -10,7 +10,7 @@ from src.graph.state import QuizState
 from src.models.quiz import Question, ValidationList
 
 
-def validate_answers(state: QuizState) -> Dict[str, Any]:
+def validate_answers(state: QuizState) -> dict[str, Any]:
     """
     Answer Validator Agent: Validate that answers are correct and unambiguous.
 
@@ -44,8 +44,8 @@ def validate_answers(state: QuizState) -> Dict[str, Any]:
     # Use structured output
     llm_with_structure = llm.with_structured_output(ValidationList)
 
-    validated_questions: List[Question] = []
-    validation_issues: List[Dict[str, Any]] = []
+    validated_questions: list[Question] = []
+    validation_issues: list[dict[str, Any]] = []
 
     # Validate questions in batches
     batch_size = 5
@@ -132,9 +132,7 @@ Check each answer carefully and provide validation results."""
     }
 
 
-def format_questions_for_validation(
-    questions: List[Question], offset: int = 0
-) -> str:
+def format_questions_for_validation(questions: list[Question], offset: int = 0) -> str:
     """
     Format questions for the validation prompt.
 
@@ -147,7 +145,8 @@ def format_questions_for_validation(
     """
     formatted = []
     for i, q in enumerate(questions):
-        formatted.append(f"""Question {offset + i}:
+        formatted.append(
+            f"""Question {offset + i}:
 Topic: {q.topic}
 Difficulty: {q.difficulty.value}
 Question: {q.question_text}
@@ -158,6 +157,7 @@ Options:
   D: {q.options['D']}
 Marked Correct Answer: {q.correct_answer} - {q.options[q.correct_answer]}
 Explanation: {q.explanation or 'Not provided'}
----""")
+---"""
+        )
 
     return "\n".join(formatted)

@@ -1,9 +1,5 @@
 """Typer CLI application for quiz generation."""
 
-import os
-from pathlib import Path
-from typing import List, Optional
-
 import typer
 from rich.console import Console
 from rich.panel import Panel
@@ -26,7 +22,7 @@ console = Console()
 
 @app.command()
 def generate(
-    topics: List[str] = typer.Option(
+    topics: list[str] = typer.Option(
         ...,
         "--topic",
         "-t",
@@ -47,12 +43,12 @@ def generate(
         help="Overall difficulty level",
         case_sensitive=False,
     ),
-    title: Optional[str] = typer.Option(
+    title: str | None = typer.Option(
         None,
         "--title",
         help="Custom quiz title",
     ),
-    description: Optional[str] = typer.Option(
+    description: str | None = typer.Option(
         None,
         "--description",
         help="Custom quiz description",
@@ -95,9 +91,7 @@ def generate(
         quiz-agent generate -t "World History" -t "Science" -q 15 -d medium -o my_quiz
     """
     # Display configuration
-    display_config(
-        topics, questions_per_round, difficulty, title, description, output
-    )
+    display_config(topics, questions_per_round, difficulty, title, description, output)
 
     # Create user input
     user_input = UserInput(
@@ -158,7 +152,7 @@ def generate(
             questions_file, answers_file = export_quiz_with_separate_answers(
                 quiz, output
             )
-            console.print(f"\n[green]✓[/green] Quiz exported successfully!")
+            console.print("\n[green]✓[/green] Quiz exported successfully!")
             console.print(f"  Questions: {questions_file}")
             console.print(f"  Answers:   {answers_file}")
         else:
@@ -199,11 +193,11 @@ Version: 0.1.0
 
 
 def display_config(
-    topics: List[str],
+    topics: list[str],
     questions_per_round: int,
     difficulty: QuestionDifficulty,
-    title: Optional[str],
-    description: Optional[str],
+    title: str | None,
+    description: str | None,
     output: str,
 ) -> None:
     """Display the configuration before generation."""
@@ -256,7 +250,10 @@ def display_quiz_summary(quiz, state) -> None:
 
         # Count how many questions were regenerated
         if quiz.metadata.regeneration_count > 0:
-            table.add_row("Questions Regenerated", f"[yellow]{quiz.metadata.regeneration_count}[/yellow]")
+            table.add_row(
+                "Questions Regenerated",
+                f"[yellow]{quiz.metadata.regeneration_count}[/yellow]",
+            )
 
     console.print()
     console.print(table)

@@ -1,6 +1,6 @@
 """Quality Reviewer Agent - Reviews question quality and provides feedback."""
 
-from typing import Any, Dict, List
+from typing import Any
 
 from langchain_aws import ChatBedrock
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -10,7 +10,7 @@ from src.graph.state import QuizState
 from src.models.quiz import Question, ReviewList
 
 
-def review_questions(state: QuizState) -> Dict[str, Any]:
+def review_questions(state: QuizState) -> dict[str, Any]:
     """
     Quality Reviewer Agent: Review generated questions for quality.
 
@@ -29,7 +29,9 @@ def review_questions(state: QuizState) -> Dict[str, Any]:
     """
     settings = get_settings()
     raw_questions = state["raw_questions"]
-    quality_threshold = state.get("quality_threshold", settings.default_quality_threshold)
+    quality_threshold = state.get(
+        "quality_threshold", settings.default_quality_threshold
+    )
 
     if not raw_questions:
         return {
@@ -45,8 +47,8 @@ def review_questions(state: QuizState) -> Dict[str, Any]:
 
     llm_with_structure = llm.with_structured_output(ReviewList)
 
-    reviewed_questions: List[Question] = []
-    all_feedback: List[Dict[str, Any]] = []
+    reviewed_questions: list[Question] = []
+    all_feedback: list[dict[str, Any]] = []
     low_quality_count = 0
 
     # Review questions in batches (to avoid token limits)
@@ -146,7 +148,7 @@ Evaluate each question with detailed scores and feedback."""
     }
 
 
-def format_questions_for_review(questions: List[Question], offset: int = 0) -> str:
+def format_questions_for_review(questions: list[Question], offset: int = 0) -> str:
     """
     Format questions for the review prompt.
 
@@ -159,7 +161,8 @@ def format_questions_for_review(questions: List[Question], offset: int = 0) -> s
     """
     formatted = []
     for i, q in enumerate(questions):
-        formatted.append(f"""Question {offset + i}:
+        formatted.append(
+            f"""Question {offset + i}:
 Topic: {q.topic}
 Difficulty: {q.difficulty.value}
 Question: {q.question_text}
@@ -170,6 +173,7 @@ Options:
   D: {q.options['D']}
 Correct Answer: {q.correct_answer}
 Explanation: {q.explanation or 'Not provided'}
----""")
+---"""
+        )
 
     return "\n".join(formatted)

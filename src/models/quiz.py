@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -24,7 +24,7 @@ class Question(BaseModel):
         description="Unique identifier for the question",
     )
     question_text: str = Field(..., min_length=10, description="The question text")
-    options: Dict[str, str] = Field(
+    options: dict[str, str] = Field(
         ...,
         description="Multiple choice options (A, B, C, D)",
     )
@@ -38,24 +38,24 @@ class Question(BaseModel):
         default=QuestionDifficulty.MEDIUM,
         description="Question difficulty level",
     )
-    explanation: Optional[str] = Field(
+    explanation: str | None = Field(
         None,
         description="Explanation of the correct answer",
     )
-    quality_score: Optional[float] = Field(
+    quality_score: float | None = Field(
         None,
         ge=0.0,
         le=1.0,
         description="Quality score from reviewer (0.0 to 1.0)",
     )
-    feedback: Optional[str] = Field(
+    feedback: str | None = Field(
         None,
         description="Feedback from quality reviewer",
     )
 
     @field_validator("options")
     @classmethod
-    def validate_options(cls, v: Dict[str, str]) -> Dict[str, str]:
+    def validate_options(cls, v: dict[str, str]) -> dict[str, str]:
         """Ensure options contains exactly A, B, C, D."""
         required_keys = {"A", "B", "C", "D"}
         if set(v.keys()) != required_keys:
@@ -97,14 +97,14 @@ class QuizRound(BaseModel):
     round_name: str = Field(..., min_length=1, description="Display name for the round")
     round_number: int = Field(..., ge=1, description="Round sequence number")
     topic: str = Field(..., min_length=1, description="Main topic for this round")
-    questions: List[Question] = Field(
+    questions: list[Question] = Field(
         default_factory=list,
         description="Questions in this round",
     )
 
     @field_validator("questions")
     @classmethod
-    def validate_questions(cls, v: List[Question]) -> List[Question]:
+    def validate_questions(cls, v: list[Question]) -> list[Question]:
         """Ensure questions list is not empty if provided."""
         if v is not None and len(v) == 0:
             return v  # Allow empty list during construction
@@ -132,21 +132,21 @@ class QuizMetadata(BaseModel):
 
     created_at: datetime = Field(default_factory=datetime.now)
     model_used: str = Field(default="claude-3-5-sonnet-20241022")
-    total_tokens_used: Optional[int] = Field(None, ge=0)
-    generation_time_seconds: Optional[float] = Field(None, ge=0.0)
+    total_tokens_used: int | None = Field(None, ge=0)
+    generation_time_seconds: float | None = Field(None, ge=0.0)
     regeneration_count: int = Field(default=0, ge=0)
-    average_quality_score: Optional[float] = Field(None, ge=0.0, le=1.0)
+    average_quality_score: float | None = Field(None, ge=0.0, le=1.0)
 
 
 class Quiz(BaseModel):
     """A complete quiz with multiple rounds."""
 
     title: str = Field(..., min_length=1, description="Quiz title")
-    description: Optional[str] = Field(
+    description: str | None = Field(
         None,
         description="Quiz description or instructions",
     )
-    rounds: List[QuizRound] = Field(
+    rounds: list[QuizRound] = Field(
         default_factory=list,
         description="Quiz rounds",
     )
@@ -167,16 +167,14 @@ class Quiz(BaseModel):
 
     def get_questions_by_difficulty(
         self, difficulty: QuestionDifficulty
-    ) -> List[Question]:
+    ) -> list[Question]:
         """Get all questions of a specific difficulty level."""
         questions = []
         for round in self.rounds:
-            questions.extend(
-                [q for q in round.questions if q.difficulty == difficulty]
-            )
+            questions.extend([q for q in round.questions if q.difficulty == difficulty])
         return questions
 
-    def get_questions_by_topic(self, topic: str) -> List[Question]:
+    def get_questions_by_topic(self, topic: str) -> list[Question]:
         """Get all questions for a specific topic."""
         questions = []
         for round in self.rounds:
@@ -198,7 +196,7 @@ class Quiz(BaseModel):
 class UserInput(BaseModel):
     """User input for quiz generation."""
 
-    topics: List[str] = Field(..., min_items=1, description="Quiz topics")
+    topics: list[str] = Field(..., min_items=1, description="Quiz topics")
     questions_per_round: int = Field(
         ...,
         ge=1,
@@ -209,12 +207,12 @@ class UserInput(BaseModel):
         default=QuestionDifficulty.MEDIUM,
         description="Overall difficulty level",
     )
-    quiz_title: Optional[str] = Field(None, description="Custom quiz title")
-    quiz_description: Optional[str] = Field(None, description="Custom description")
+    quiz_title: str | None = Field(None, description="Custom quiz title")
+    quiz_description: str | None = Field(None, description="Custom description")
 
     @field_validator("topics")
     @classmethod
-    def validate_topics(cls, v: List[str]) -> List[str]:
+    def validate_topics(cls, v: list[str]) -> list[str]:
         """Clean and validate topics."""
         cleaned = [topic.strip() for topic in v if topic.strip()]
         if not cleaned:
@@ -241,7 +239,7 @@ class QuizPlan(BaseModel):
 
     title: str = Field(..., description="Quiz title")
     description: str = Field(..., description="Quiz description")
-    rounds: List[Dict[str, Any]] = Field(
+    rounds: list[dict[str, Any]] = Field(
         ...,
         description="List of rounds with topic, question_count, etc.",
     )
@@ -250,7 +248,7 @@ class QuizPlan(BaseModel):
 class QuestionList(BaseModel):
     """List of questions from Generator Agent."""
 
-    questions: List[Question] = Field(
+    questions: list[Question] = Field(
         ...,
         description="List of generated questions",
     )
@@ -267,14 +265,14 @@ class QuestionReview(BaseModel):
     engagement_score: float = Field(..., ge=0.0, le=1.0)
     overall_score: float = Field(..., ge=0.0, le=1.0)
     feedback: str
-    issues: List[str] = Field(default_factory=list)
+    issues: list[str] = Field(default_factory=list)
     passed: bool
 
 
 class ReviewList(BaseModel):
     """List of reviews from Reviewer Agent."""
 
-    reviews: List[QuestionReview] = Field(
+    reviews: list[QuestionReview] = Field(
         ...,
         description="List of question reviews",
     )
@@ -289,15 +287,15 @@ class QuestionValidation(BaseModel):
     incorrect_options_valid: bool
     is_ambiguous: bool
     explanation_matches: bool
-    issues: List[str] = Field(default_factory=list)
-    suggested_fix: Optional[str] = None
+    issues: list[str] = Field(default_factory=list)
+    suggested_fix: str | None = None
     confidence: float = Field(..., ge=0.0, le=1.0)
 
 
 class ValidationList(BaseModel):
     """List of validations from Validator Agent."""
 
-    validations: List[QuestionValidation] = Field(
+    validations: list[QuestionValidation] = Field(
         ...,
         description="List of question validations",
     )

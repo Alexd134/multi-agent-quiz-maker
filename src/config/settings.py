@@ -1,8 +1,6 @@
 """Application settings and configuration."""
 
-import os
 from functools import lru_cache
-from typing import Optional
 
 from dotenv import load_dotenv
 from pydantic import Field
@@ -41,8 +39,8 @@ class Settings(BaseSettings):
 
     # Generation Settings
     default_temperature: float = Field(
-        default=0.8, #higher temp than usual to try and generate more interesting questions
-        ge=0.0, #create max and min values for temp
+        default=0.8,  # higher temp than usual to try and generate more interesting questions
+        ge=0.0,  # create max and min values for temp
         le=1.0,
         description="Default temperature for question generation",
         validation_alias="DEFAULT_TEMPERATURE",
@@ -89,7 +87,7 @@ class Settings(BaseSettings):
     )
 
     # Optional: Web Search (for future feature)
-    tavily_api_key: Optional[str] = Field(
+    tavily_api_key: str | None = Field(
         default=None,
         description="Tavily API key for web search (optional)",
         validation_alias="TAVILY_API_KEY",
@@ -109,7 +107,7 @@ class Settings(BaseSettings):
 
 
 # This is loaded the first time and then cached for further ues by other agents
-@lru_cache()
+@lru_cache
 def get_settings() -> Settings:
     """
     Get cached settings instance.

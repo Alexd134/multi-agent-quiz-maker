@@ -1,13 +1,13 @@
 """Format Coordinator Agent - Organizes questions into final quiz structure."""
 
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any
 
 from src.graph.state import QuizState
 from src.models.quiz import Quiz, QuizMetadata, QuizRound
 
 
-def format_quiz(state: QuizState) -> Dict[str, Any]:
+def format_quiz(state: QuizState) -> dict[str, Any]:
     """
     Format Coordinator Agent: Organize validated questions into final quiz structure.
 
@@ -90,7 +90,7 @@ def format_quiz(state: QuizState) -> Dict[str, Any]:
     return {"final_quiz": quiz, "quiz_rounds": quiz_rounds}
 
 
-def organize_questions_by_topic(state: QuizState) -> Dict[str, Any]:
+def organize_questions_by_topic(state: QuizState) -> dict[str, Any]:
     """
     Helper function to organize questions by topic.
 
@@ -102,7 +102,7 @@ def organize_questions_by_topic(state: QuizState) -> Dict[str, Any]:
     """
     validated_questions = state["validated_questions"]
 
-    topic_map: Dict[str, list] = {}
+    topic_map: dict[str, list] = {}
     for question in validated_questions:
         topic = question.topic
         if topic not in topic_map:

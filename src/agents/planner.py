@@ -1,6 +1,6 @@
 """Planner Agent - Creates quiz structure and distributes topics."""
 
-from typing import Any, Dict
+from typing import Any
 
 from langchain_aws import ChatBedrock
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -10,7 +10,7 @@ from src.graph.state import QuizState
 from src.models.quiz import QuestionDifficulty, QuizPlan
 
 
-def create_quiz_plan(state: QuizState) -> Dict[str, Any]:
+def create_quiz_plan(state: QuizState) -> dict[str, Any]:
     """
     Planner Agent: Create a structured quiz plan from user input.
 
@@ -86,14 +86,14 @@ Do NOT create additional rounds or break topics into sub-topics."""
         # Validate and ensure all required fields
         quiz_plan = validate_quiz_plan(quiz_plan, user_input)
 
-    except Exception as e:
+    except Exception:
         # Fallback: create a basic plan
         quiz_plan = create_fallback_plan(user_input)
 
     return {"quiz_plan": quiz_plan}
 
 
-def create_fallback_plan(user_input) -> Dict[str, Any]:
+def create_fallback_plan(user_input) -> dict[str, Any]:
     """
     Create a basic fallback plan if AI generation fails.
 
@@ -120,7 +120,7 @@ def create_fallback_plan(user_input) -> Dict[str, Any]:
     }
 
 
-def validate_quiz_plan(plan: Dict[str, Any], user_input) -> Dict[str, Any]:
+def validate_quiz_plan(plan: dict[str, Any], user_input) -> dict[str, Any]:
     """
     Validate and fix the quiz plan to ensure it has all required fields.
 
@@ -159,7 +159,9 @@ def validate_quiz_plan(plan: Dict[str, Any], user_input) -> Dict[str, Any]:
         actual_rounds = len(plan["rounds"])
 
         if actual_rounds != expected_rounds:
-            print(f"Warning: LLM created {actual_rounds} rounds but expected {expected_rounds}. Using fallback.")
+            print(
+                f"Warning: LLM created {actual_rounds} rounds but expected {expected_rounds}. Using fallback."
+            )
             # Use fallback plan to ensure correct number of rounds
             plan["rounds"] = [
                 {
@@ -184,7 +186,9 @@ def validate_quiz_plan(plan: Dict[str, Any], user_input) -> Dict[str, Any]:
                 if "difficulty" not in round_data:
                     round_data["difficulty"] = user_input.difficulty.value
                 # Ensure difficulty is valid
-                if round_data["difficulty"] not in [d.value for d in QuestionDifficulty]:
+                if round_data["difficulty"] not in [
+                    d.value for d in QuestionDifficulty
+                ]:
                     round_data["difficulty"] = user_input.difficulty.value
 
     return plan

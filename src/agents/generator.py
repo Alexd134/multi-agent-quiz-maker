@@ -1,6 +1,6 @@
 """Question Generator Agent - Generates quiz questions using AI."""
 
-from typing import Any, Dict, List
+from typing import Any
 
 from langchain_aws import ChatBedrock
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -10,7 +10,7 @@ from src.graph.state import QuizState
 from src.models.quiz import Question, QuestionDifficulty, QuestionList
 
 
-def generate_questions(state: QuizState) -> Dict[str, Any]:
+def generate_questions(state: QuizState) -> dict[str, Any]:
     """
     Question Generator Agent: Generate quiz questions based on the quiz plan.
 
@@ -47,13 +47,13 @@ def generate_questions(state: QuizState) -> Dict[str, Any]:
         all_questions = [q for q in raw_questions if q.id not in failed_question_ids]
 
         # Group failed questions by topic to know how many to regenerate per round
-        failed_by_topic: Dict[str, int] = {}
+        failed_by_topic: dict[str, int] = {}
         for fb in review_feedback:
             topic = fb["topic"]
             failed_by_topic[topic] = failed_by_topic.get(topic, 0) + 1
     else:
         # First generation - start fresh
-        all_questions: List[Question] = []
+        all_questions: list[Question] = []
         failed_by_topic = {}
 
     # Generate questions for each round
@@ -89,7 +89,7 @@ Focus on:
 """
 
         # Create the generation prompt
-        system_prompt = f"""You are an expert quiz question writer. Create high-quality, engaging multiple-choice questions.
+        system_prompt = """You are an expert quiz question writer. Create high-quality, engaging multiple-choice questions.
 
                 Requirements:
                 - Each question must have exactly 4 options (A, B, C, D)
@@ -147,9 +147,7 @@ Focus on:
     }
 
 
-def format_feedback_for_topic(
-    feedback: List[Dict[str, Any]], topic: str
-) -> str:
+def format_feedback_for_topic(feedback: list[dict[str, Any]], topic: str) -> str:
     """
     Format quality feedback for a specific topic.
 
